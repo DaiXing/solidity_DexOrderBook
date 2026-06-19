@@ -201,16 +201,107 @@ contract OrderStorage is IOrderStorage {
         }
     }
 
-    // 查询订单。
+    // 查询订单。 分页。
     function getOrders(
         address collection,
         uint256 tokenId,
         LibOrder.Side side, // 卖家、买家
         LibOrder.SaleKind saleKind,
-        uint256 count,
-        Price price,
-        OrderKey firstOrderKey
-    ) external returns (LibOrder.Order[] memory orders, OrderKey nextOrderKey);
+        uint256 count, // 多少个。
+        Price price, // 价格档位。
+        OrderKey firstOrderKey // 分页。从哪个元素开启取。
+    )
+        external
+        returns (LibOrder.Order[] memory orderList, OrderKey nextOrderKey)
+    {
+        // 返回订单列表。
+        orderList = new LibOrder.Order[](count);
+
+        // 为空，取价格。
+        if (RedBlackTreeLibrary.isEmpty(price)) {
+            price = getBestPrice(collection, side);
+        } else {
+            // 没有开始元素，说明取完了。看下个价格。
+            if (LibOrder.isSentinel(firstOrderKey)) {
+                price = getNextBestPrice(collection, side, price);
+            }
+        }
+
+        // 遍历一个价格。也就是一个队列。
+        uint256 i;
+        while (RedBlackTreeLibrary.isNotEmpty(price) && i < count) {
+            // 队列。
+            LibOrder.OrderQueue storage orderQueue = orderQueues[collection][
+                side
+            ][price];
+            OrderKey orderKey = orderQueue.head;
+
+            if (LibOrder.isNotSentinel(firstOrderKey)) {
+                // 找到首个元素。
+                while (
+                    LibOrder.isNotSentinel(orderKey) &&
+                    OrderKey.unwrap(firstOrderKey) != OrderKey.unwrap(orderKey)
+                ) {
+                    LibOrder.DBOrder storage order = orders[orderKey];
+                    orderKey = order.next;
+                }
+                firstOrderKey = LibOrder.ORDERKEY_SENTINEL;
+            }
+
+            // 遍历链表。
+            while (LibOrder.isNotSentinel(orderKey) && i < count) {
+                LibOrder.DBOrder storage dbOrder = orders[orderKey];
+                orderKey = dbOrder.next;
+
+                // 订单过期了。忽略。
+                if (
+                    dbOrder.order.expiry != 0 &&
+                    dbOrder.order.expiry < block.timestamp
+                ) {
+                    continue;
+                }
+
+                // 出价。买家。
+                if (
+                    side == LibOrder.Side.Bid &&
+                    saleKind == LibOrder.SaleKind.FixedPriceForCollection
+                ) {
+                    // saleKind 不匹配。
+                    if (
+                        dbOrder.order.side == LibOrder.Side.Bid &&
+                        dbOrder.order.saleKind ==
+                        LibOrder.SaleKind.FixedPriceForItem
+                    ) {
+                        continue;
+                    }
+                }
+
+                // 出价。买家。
+                if (
+                    side == LibOrder.Side.Bid &&
+                    saleKind == LibOrder.SaleKind.FixedPriceForItem
+                ) {
+                    // tokenId 不匹配
+                    if (
+                        dbOrder.order.side == LibOrder.Side.Bid &&
+                        dbOrder.order.saleKind ==
+                        LibOrder.SaleKind.FixedPriceForItem &&
+                        dbOrder.order.nft.tokenId != tokenId
+                    ) {
+                        continue;
+                    }
+                }
+
+                // 满足条件。
+                orderList[i] = dbOrder.order;
+                i++;
+                nextOrderKey = dbOrder.next;
+            }
+
+            // 当前队列，遍历完了。需要遍历下个队列。
+            price = getNextBestPrice(collection, side, price);
+        }
+    }
 
     // 查找最好的订单。
     function getBestOrder(

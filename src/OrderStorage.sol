@@ -17,12 +17,12 @@ contract OrderStorage is IOrderStorage {
     // 订单信息。 key=订单key  value=订单+链表
     mapping(OrderKey => LibOrder.DBOrder) public orders;
 
-    // 便于快速查到价格。
+    // 便于快速查到价格。 最优价，次优价。
     // NFT合约 -》 卖方买方 -》 全部的价格
     mapping(address => mapping(LibOrder.Side => RedBlackTreeLibrary.Tree))
         public priceTrees;
 
-    // 便于找到需要的订单。
+    // 多个订单，可以价格相同，所以用列表。便于找到需要的订单。
     // NFT合约 -》 卖方买方 -》 价格 -》 订单列表
     mapping(address => mapping(LibOrder.Side => mapping(Price => LibOrder.OrderQueue)))
         public orderQueues;
@@ -309,5 +309,69 @@ contract OrderStorage is IOrderStorage {
         uint256 tokenId,
         LibOrder.Side side, // 卖家、买家
         LibOrder.SaleKind saleKind
-    ) external returns (LibOrder.Order memory order);
+    ) external returns (LibOrder.Order memory orderResult) {
+        // 取最优价。
+        Price price = getBestPrice(collection, side);
+
+        // 有价格，就查询对于的列表。
+        while (RedBlackTreeLibrary.isNotEmpty(price)) {
+            LibOrder.OrderQueue storage orderQueue = orderQueues[collection][
+                side
+            ][price];
+
+            OrderKey orderKey = orderQueue.head;
+
+            // 遍历1个列表。
+            while (LibOrder.isNotSentinel(orderKey)) {
+                LibOrder.DBOrder storage dbOrder = orders[orderKey];
+                orderKey = dbOrder.next;
+
+                // 过期了。
+                if (
+                    dbOrder.order.expiry != 0 &&
+                    dbOrder.order.expiry < block.timestamp
+                ) {
+                    continue;
+                }
+
+                // 出价。买家。
+                if (
+                    side == LibOrder.Side.Bid &&
+                    saleKind == LibOrder.SaleKind.FixedPriceForItem
+                ) {
+                    // tokenId 不相同。
+                    if (
+                        dbOrder.order.side == LibOrder.Side.Bid &&
+                        dbOrder.order.saleKind ==
+                        LibOrder.SaleKind.FixedPriceForItem &&
+                        tokenId != dbOrder.order.nft.tokenId
+                    ) {
+                        continue;
+                    }
+                }
+
+                // 出价。买家。
+                if (
+                    side == LibOrder.Side.Bid &&
+                    saleKind == LibOrder.SaleKind.FixedPriceForCollection
+                ) {
+                    // saleKind 不相同。
+                    if (
+                        dbOrder.order.side == LibOrder.Side.Bid &&
+                        dbOrder.order.saleKind ==
+                        LibOrder.SaleKind.FixedPriceForItem
+                    ) {
+                        continue;
+                    }
+                }
+
+                // 其他情况。已经找到了
+                orderResult = dbOrder.order;
+                return orderResult;
+            }
+
+            // 当前列表，没有找到。继续看下个列表。
+            price = getNextBestPrice(collection, side, price);
+        }
+    }
 }

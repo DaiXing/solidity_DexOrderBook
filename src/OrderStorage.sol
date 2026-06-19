@@ -27,6 +27,9 @@ contract OrderStorage is IOrderStorage {
     mapping(address => mapping(LibOrder.Side => mapping(Price => LibOrder.OrderQueue)))
         public orderQueues;
 
+    // pad空间。升级占位。
+    uint256[50] private __gap__;
+
     // 取最好的价格。
     function getBestPrice(
         address collection,

@@ -33,8 +33,8 @@ library LibOrder {
     struct Order {
         Side side; // 区分卖家、买家
         SaleKind saleKind; // 买单个token？
-        address maker; // 创建者。挂单。
-        Asset nft; // 资产
+        address maker; // 创建者。挂单者。可以是卖家、买家。
+        Asset nft; // NFT资产
         Price price; // 价格
         uint64 expiry; // 过期时间。
         uint64 salt; // 加盐
@@ -56,7 +56,7 @@ library LibOrder {
     }
     // 撮合订单。
     // 用side区分卖家、买家。
-    struct MatchOrder {
+    struct MatchDetail {
         Order sellOrder;
         Order buyOrder;
     }

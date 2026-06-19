@@ -70,7 +70,7 @@ library LibOrder {
         );
 
     // 哈希。 资产。
-    function hash(Asset memory asset) internal pure returns (bytes32 hashVal) {
+    function hash(Asset memory asset) internal pure returns (bytes32) {
         // 编码。包含字段。
         bytes memory buf = abi.encode(
             ASSET_TYPEHASH,
@@ -78,11 +78,12 @@ library LibOrder {
             asset.collection,
             asset.amount
         );
-        hashVal = keccak256(buf);
+        bytes32 hashVal = keccak256(buf);
+        return hashVal;
     }
 
     // 哈希。 订单。
-    function hash(Order memory order) internal pure returns (bytes32 hashVal) {
+    function hash(Order memory order) internal pure returns (OrderKey) {
         // 编码。包含字段。
         bytes memory buf = abi.encode(
             ORDER_TYPEHASH,
@@ -94,7 +95,8 @@ library LibOrder {
             order.expiry,
             order.salt
         );
-        hashVal = keccak256(buf);
+        bytes32 hashVal = keccak256(buf);
+        return OrderKey.wrap(hashVal); // 转换类型。
     }
 
     function isSentinel(OrderKey orderKey) public pure returns (bool) {

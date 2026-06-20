@@ -13,13 +13,16 @@ import {
     LibTransferSafeUpgradeable,
     IERC721
 } from "./libraries/LibTransferSafeUpgradeable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 
 // 订单薄。
 contract OrderBook is
     IOrderBook,
     OrderStorage,
     OrderValidator,
-    ProtocolManager
+    ProtocolManager,
+
 {
     using LibTransferSafeUpgradeable for address;
     using LibTransferSafeUpgradeable for IERC721;
@@ -82,6 +85,7 @@ contract OrderBook is
         // 买单，累加eth。
         uint256 ethSum = 0;
 
+        // 遍历。
         for (uint256 k = 0; k < orderCount; k++) {
             LibOrder.Order calldata order = orders[k];
 
@@ -91,6 +95,23 @@ contract OrderBook is
             if (order.side == LibOrder.Side.Bid) {
                 buyPrice = Price.unwrap(order.price) * order.nft.amount;
             }
+
+            // 创建订单。
+            OrderKey orderKey = _makeOrderTry(order, buyPrice);
+            orderKeys[k] = orderKey;
+
+            // 有效订单。
+            if (
+                OrderKey.unwrap(orderKey) !=
+                OrderKey.unwrap(OrderKey.ORDERKEY_SENTINEL)
+            ) {
+                ethSum += buyPrice;
+            }
+        }
+
+        // eth 给多了。返回。
+        if (msg.value > buyPrice) {
+            payable(msg.sender).safeTransferETH(msg.value - buyPrice);
         }
     }
 
@@ -167,24 +188,32 @@ contract OrderBook is
     // 取消订单。批量。
     function cancelOrders(
         OrderKey[] calldata orderKeys // 一批订单
-    ) external returns (bool[] memory successList);
+    ) external returns (bool[] memory successList){
+        
+    }
 
     // 修改订单。批量。
     // 返回，新的OrderKey，因为字段修改了。
     function editOrders(
         LibOrder.Order[] calldata orders // 一批订单
-    ) external returns (OrderKey[] memory newOrderKeys);
+    ) external returns (OrderKey[] memory newOrderKeys){
+
+    }
 
     // 撮合订单。单个
     function matchOrder(
         LibOrder.Order calldata sellOrder, // 卖单
         LibOrder.Order calldata buyOrder // 买单
-    ) external payable;
+    ) external payable{
+
+    }
 
     // 撮合订单。批量。
     function matchOrders(
         LibOrder.MatchDetail[] calldata matchDetails
-    ) external returns (bool[] memory successList);
+    ) external returns (bool[] memory successList){
+
+    }
 
     // 批量调用。
     //仅允许聚合 make/cancel/edit/match 相关函数，避免通过 multicall 调管理函数。
@@ -195,5 +224,7 @@ contract OrderBook is
     )
         external
         payable
-        returns (bool[] memory successList, bytes[] memory results);
+        returns (bool[] memory successList, bytes[] memory results){
+
+        }
 }

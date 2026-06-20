@@ -77,7 +77,10 @@ contract OrderBook is
     // 金库。
     address private _vault;
 
-    function initialize() {}
+    function initialize() {
+        // _owner = msg.sender;
+        _transferOwnership(msg.sender);
+    }
 
     // 创建订单。批量。卖家、买家都可以。
     // 返回，订单标识。
@@ -254,14 +257,36 @@ contract OrderBook is
     // 修改订单。批量。
     // 返回，新的OrderKey，因为字段修改了。
     function editOrders(
-        LibOrder.Order[] calldata orders // 一批订单
+        LibOrder.EditDetail[] calldata orders // 一批订单
     )
         external
         whenNotPaused
         nonReentrant
         returns (OrderKey[] memory newOrderKeys)
-    {}
+    {
+        uint256 orderCount = orders.length;
+        newOrderKeys = new OrderKey[](orderCount);
 
+        // eth 差额。
+        uint256 sumBidPrice = 0;
+        for (uint256 m = 0; m < orderCount; m++) {
+            // 修改。
+            (OrderKey newOrderKey, uint256 needBidPrice) = _editOrderTry(
+                orders[m].oldOrderKey,
+                orders[m].newOrder
+            );
+
+            newOrderKeys[m] = newOrderKey;
+            sumBidPrice += needBidPrice;
+        }
+
+        // 如果用户给多了，需要退回。
+        if (msg.value > sumBidPrice) {
+            payable(msg.sender).safeTransferETH(msg.value - sumBidPrice);
+        }
+    }
+
+    // 修改订单。尝试。
     function _editOrderTry(
         OrderKey oldOrderKey,
         LibOrder.Order calldata newOrder

@@ -19,7 +19,7 @@ interface IOrderBook {
     // 修改订单。批量。
     // 返回，新的OrderKey，因为字段修改了。
     function editOrders(
-        LibOrder.Order[] calldata orders // 一批订单
+        LibOrder.EditDetail[] calldata orders // 一批订单
     ) external returns (OrderKey[] memory newOrderKeys);
 
     // 撮合订单。单个

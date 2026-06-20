@@ -502,7 +502,7 @@ contract OrderBook is
                     address(this)
                 );
 
-                // todo 删除买单？
+                // todo 买单可以买多个token，这里买了1个就删除了？
                 _removeOrder(buyOrder);
 
                 // 更新 买单
@@ -554,7 +554,15 @@ contract OrderBook is
     function matchOrder(
         LibOrder.Order calldata sellOrder, // 卖单
         LibOrder.Order calldata buyOrder // 买单
-    ) external payable whenNotPaused nonReentrant {}
+    ) external payable whenNotPaused nonReentrant {
+        // 撮合订单。
+        uint128 costValue = _matchOrder(sellOrder, buyOrder, msg.value);
+
+        // 用户给多了，退回eth 。
+        if (msg.value > costValue) {
+            msg.sender.safeTransferETH(msg.value - costValue);
+        }
+    }
 
     // 撮合订单。批量。
     function matchOrders(

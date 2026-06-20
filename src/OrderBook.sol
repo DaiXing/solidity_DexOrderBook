@@ -217,7 +217,7 @@ contract OrderBook is
     function _cancelOrderTry(
         OrderKey orderKey
     ) internal returns (bool success) {
-        LibOrder.Order memory order = orders[orderKey];
+        LibOrder.Order memory order = orders[orderKey].order;
         if (
             order.maker == msg.sender && // 只能自己
             filledAmount[orderKey] < order.nft.amount // 没有完全成交
@@ -292,8 +292,8 @@ contract OrderBook is
     function _editOrderTry(
         OrderKey oldOrderKey,
         LibOrder.Order calldata newOrder
-    ) internal returns (OrderKey newOrderKey, Price deltaBidPrice) {
-        LibOrder.Order memory oldOrder = orders[oldOrderKey];
+    ) internal returns (OrderKey newOrderKey, uint256 deltaBidPrice) {
+        LibOrder.Order memory oldOrder = orders[oldOrderKey].order;
         newOrderKey = LibOrder.hash(newOrder);
         uint256 oldFilledAmount = filledAmount[oldOrderKey];
 

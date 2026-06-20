@@ -68,6 +68,7 @@ library LibOrder {
         keccak256(
             "Order(uint8 side,uint8 saleKind,address maker,Asset nft,uint128 price,uint64 expiry,uint64 salt)Asset(uint256 tokenId,address collection,uint96 amount)"
         );
+    Price public constant PRICE_EMPTY = Price.wrap(0);
 
     // 哈希。 资产。
     function hash(Asset memory asset) internal pure returns (bytes32) {

@@ -90,6 +90,7 @@ contract OrderBook is
         LibOrder.Order[] calldata orders // 一批订单
     )
         external
+        payable
         whenNotPaused
         nonReentrant
         returns (OrderKey[] memory orderKeys)
@@ -173,7 +174,7 @@ contract OrderBook is
 
                 // ETH 存金库。
                 // eth 必须使用 msg.value 传递金额。
-                IVault(_vault).depositeETH{value: uint256(ethAmount)}(
+                IVault(_vault).depositETH{value: uint256(ethAmount)}(
                     newOrderKey,
                     ethAmount
                 ); //
@@ -262,6 +263,7 @@ contract OrderBook is
         LibOrder.EditDetail[] calldata orders // 一批订单
     )
         external
+        payable
         whenNotPaused
         nonReentrant
         returns (OrderKey[] memory newOrderKeys)
@@ -363,7 +365,7 @@ contract OrderBook is
         LibOrder.Order calldata buyOrder,
         OrderKey sellOrderKey,
         OrderKey buyOrderKey
-    ) internal {
+    ) internal view {
         // 不能是同一个订单。
         require(
             OrderKey.unwrap(sellOrderKey) != OrderKey.unwrap(buyOrderKey),

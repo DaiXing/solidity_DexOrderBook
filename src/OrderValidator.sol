@@ -49,7 +49,7 @@ abstract contract OrderValidator {
     // 读取。成交金额。
     function _getFilledAmount(
         OrderKey orderKey
-    ) internal returns (uint256 amount) {
+    ) internal view returns (uint256 amount) {
         amount = filledAmount[orderKey];
         require(amount != CANCELLED, "CANCELLED");
     }
@@ -64,9 +64,7 @@ abstract contract OrderValidator {
     }
 
     // 取消。成交金额。
-    function _cancelFilledAmount(
-        OrderKey orderKey
-    ) internal returns (uint256 amount) {
+    function _cancelFilledAmount(OrderKey orderKey) internal {
         filledAmount[orderKey] = CANCELLED;
     }
 }

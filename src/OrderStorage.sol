@@ -34,7 +34,7 @@ contract OrderStorage is IOrderStorage {
     function getBestPrice(
         address collection,
         LibOrder.Side side
-    ) public returns (Price price) {
+    ) public view returns (Price price) {
         // 要价。卖家。 取最低价。
         if (side == LibOrder.Side.List) {
             return priceTrees[collection][side].first();
@@ -128,7 +128,7 @@ contract OrderStorage is IOrderStorage {
     // 成交后，从列表删除。
     function _removeOrder(
         LibOrder.Order memory order
-    ) internal returns (OrderKey) {
+    ) internal returns (OrderKey theOrderKey) {
         // 订单队列。
         LibOrder.OrderQueue storage orderQueue = orderQueues[
             order.nft.collection
@@ -164,6 +164,7 @@ contract OrderStorage is IOrderStorage {
         // 找到了。
         if (found) {
             LibOrder.DBOrder storage order2 = orders[iterOrderKey];
+            theOrderKey = iterOrderKey;
 
             // 如果元素是head
             if (

@@ -9,7 +9,7 @@ interface IOrderBook {
     // 返回，订单标识。
     function makeOrders(
         LibOrder.Order[] calldata orders // 一批订单
-    ) external returns (OrderKey[] memory orderKeys);
+    ) external payable returns (OrderKey[] memory orderKeys);
 
     // 取消订单。批量。
     function cancelOrders(
@@ -20,7 +20,7 @@ interface IOrderBook {
     // 返回，新的OrderKey，因为字段修改了。
     function editOrders(
         LibOrder.EditDetail[] calldata orders // 一批订单
-    ) external returns (OrderKey[] memory newOrderKeys);
+    ) external payable returns (OrderKey[] memory newOrderKeys);
 
     // 撮合订单。单个
     function matchOrder(

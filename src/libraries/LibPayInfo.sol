@@ -14,7 +14,9 @@ library LibPayInfo {
         keccak256("PayInfo(address payable receiver, uint96 share)");
 
     // 哈希。支付。
-    function hash(PayInfo memory payInfo) public returns (bytes32 hashVal) {
+    function hash(
+        PayInfo memory payInfo
+    ) public pure returns (bytes32 hashVal) {
         bytes memory buf = abi.encode(
             TYPE_HASH,
             payInfo.receiver,

@@ -52,11 +52,8 @@ contract Vault is IVault, Ownable {
     }
 
     // 存款。 增加ETH。 只能买单。
-    function depositeETH(
-        OrderKey orderKey,
-        uint256 ethAmount
-    ) external payable {
-        require(msg.value > 0, "eth invalid");
+    function depositETH(OrderKey orderKey, uint256 ethAmount) external payable {
+        require(msg.value > ethAmount, "eth not enough");
         // 增加eth。
         ETHBalance[orderKey] += msg.value;
     }

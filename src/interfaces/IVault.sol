@@ -11,7 +11,7 @@ interface IVault {
     ) external returns (uint256 ethAmount, uint256 tokenId);
 
     // 存款。 增加ETH。 只能买单。
-    function depositeETH(OrderKey orderKey, uint256 ethAmount) external payable;
+    function depositETH(OrderKey orderKey, uint256 ethAmount) external payable;
 
     // 取款。 订单需要有余额。  买单、卖单都可以。
     function withdrawETH(

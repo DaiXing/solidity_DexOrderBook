@@ -3,6 +3,19 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
+[lint]
+exclude_lints = [
+    "mixed-case-function",
+    "mixed-case-variable",
+    "pascal-case-struct",
+    "unwrapped-modifier-logic",
+    "unused-import",
+    "unused-var",
+    "unaliased-plain-import",
+    "asm-keccak256",
+    "screaming-snake-case-immutable",
+] # 保留重要的安全/风格检查，只忽略烦人的次要警告
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 
 remappings = [

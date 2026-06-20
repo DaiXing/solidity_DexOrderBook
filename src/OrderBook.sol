@@ -651,13 +651,62 @@ contract OrderBook is
             bytes calldata callData = datas[m];
             bytes4 selector;
             if (callData.length >= 4) {
+                // uint256 offset = callData.offset;// 报错。 bytes calldata 没有offset
                 assembly {
-                    // selector := calldataload( callData .offset );
+                    selector := calldataload(callData.offset) // 报错。汇编内不能 .offset
+                }
+                // selector := calldataload(offset)
+            }
+
+            // 个别方法，才支持。
+            require(
+                _isSupportedMulticallSelector(selector),
+                "selector not support"
+            );
+
+            if (_isValueSensitiveSelector(selector)) {
+                callCount++;
+                require(callCount <= 1, "callCount need <= 1");
+            }
+
+            // 调用。
+            (bool success, bytes memory resultData) = address(this)
+                .delegatecall(callData);
+            successList[m] = success;
+            results[m] = resultData;
+
+            if (!success) {
+                emit BatchMatchInnerError(m, resultData);
+
+                if (revertOnFail) {
+                    assembly {
+                        // todo 为什么没有格式化？
+                        revert(add(resultData, 32), mload(resultData))
+                    }
                 }
             }
         }
     }
 
+    function _isSupportedMulticallSelector(
+        bytes4 selector
+    ) private pure returns (bool) {
+        return
+            selector == this.makeOrders.selector ||
+            selector == this.cancelOrders.selector ||
+            selector == this.editOrders.selector ||
+            selector == this.matchOrder.selector ||
+            selector == this.matchOrders.selector;
+    }
+    function _isValueSensitiveSelector(
+        bytes4 selector
+    ) private pure returns (bool) {
+        return
+            selector == this.makeOrders.selector ||
+            selector == this.editOrders.selector ||
+            selector == this.matchOrder.selector ||
+            selector == this.matchOrders.selector;
+    }
     function pause() public onlyOwner {
         _pause();
     }

@@ -23,8 +23,8 @@ contract OrderBook is
     OrderStorage,
     OrderValidator,
     ProtocolManager,
-    Ownable,
     Pausable,
+    Ownable,
     ReentrancyGuard
 {
     using LibTransferSafeUpgradeable for address;
@@ -68,7 +68,7 @@ contract OrderBook is
         _checkDelegateCall();
         _;
     }
-    function _checkDelegateCall() {
+    function _checkDelegateCall() internal {
         // todo
     }
 
@@ -77,7 +77,7 @@ contract OrderBook is
     // 金库。
     address private _vault;
 
-    function initialize() {
+    function initialize() public {
         // _owner = msg.sender;
         _transferOwnership(msg.sender);
     }
@@ -292,7 +292,7 @@ contract OrderBook is
         LibOrder.Order calldata newOrder
     ) internal returns (OrderKey newOrderKey, Price deltaBidPrice) {
         LibOrder.Order memory oldOrder = orders[oldOrderKey];
-        OrderKey newOrderKey = LibOrder.hash(newOrder);
+        newOrderKey = LibOrder.hash(newOrder);
         uint256 oldFilledAmount = filledAmount[oldOrderKey];
 
         // todo oldFilledAmount 只存成交数量？不存成交金额？
@@ -564,10 +564,68 @@ contract OrderBook is
         }
     }
 
+    // 撮合订单。单个
+    // 匹配订单但不退回多余ETH（内部函数，仅用于批量匹配）
+    // 此函数只能通过delegatecall调用，用于批量匹配时避免多次退回ETH
+    function matchOrderWithoutPayback(
+        LibOrder.Order calldata sellOrder,
+        LibOrder.Order calldata buyOrder,
+        uint256 msgValue
+    )
+        external
+        payable
+        whenNotPaused
+        onlyDelegateCall
+        returns (uint128 costValue)
+    {
+        costValue = _matchOrder(sellOrder, buyOrder, msgValue);
+    }
+
     // 撮合订单。批量。
+    // 要么全部成功，要么全部失败。
     function matchOrders(
         LibOrder.MatchDetail[] calldata matchDetails
-    ) external whenNotPaused nonReentrant returns (bool[] memory successList) {}
+    )
+        external
+        payable
+        whenNotPaused
+        nonReentrant
+        returns (bool[] memory successList)
+    {
+        uint256 count = matchDetails.length;
+        successList = new bool[](count);
+
+        // 买家已经花费的金额。
+        uint256 buyEthSum;
+
+        // 依次执行。
+        for (uint256 m = 0; m < count; m++) {
+            LibOrder.MatchDetail storage detail = matchDetails[m];
+
+            // 使用delegatecall
+            bytes memory buf = abi.encodeWithSignature(
+                "matchOrderWithoutPayback((uint8,uint8,address,(uint256,address,uint96),uint128,uint64,uint64),(uint8,uint8,address,(uint256,address,uint96),uint128,uint64,uint64),uint256)",
+                matchDetail.sellOrder,
+                matchDetail.buyOrder,
+                msg.value - buyEthSum // 剩余的 eth
+            );
+
+            // 调用。
+            (bool success, bytes memory data) = address(this).deletecall(buf);
+            successList[m] = success;
+
+            if (success) {
+                // 如果买家发起。
+                if (matchDetail.buyOrder.maker == msg.sender) {
+                    // 买家已经支付的金额。
+                    uint128 buyPrice = abi.decode(data, (uint128));
+                    buyEthSum += buyPrice;
+                }
+            } else {
+                emit BatchMatchInnerError(m, data);
+            }
+        }
+    }
 
     // 批量调用。
     //仅允许聚合 make/cancel/edit/match 相关函数，避免通过 multicall 调管理函数。
@@ -579,5 +637,27 @@ contract OrderBook is
         external
         payable
         returns (bool[] memory successList, bytes[] memory results)
-    {}
+    {
+        uint256 count = datas.length;
+        successList = new bool[](count);
+        results = new bytes[](count);
+
+        uint256 callCount;
+        for (uint256 m = 0; m < count; m++) {
+            bytes calldata callData = datas[m];
+            bytes4 selector;
+            if (callData.length >= 4) {
+                assembly {
+                    // selector := calldataload( callData .offset );
+                }
+            }
+        }
+    }
+
+    function pause() public onlyOwner {
+        _pause();
+    }
+    function unpause() public onlyOwner {
+        _unpause();
+    }
 }

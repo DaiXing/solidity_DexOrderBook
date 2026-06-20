@@ -15,6 +15,7 @@ import {
 } from "./libraries/LibTransferSafeUpgradeable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 // 订单薄。
 contract OrderBook is
@@ -22,7 +23,9 @@ contract OrderBook is
     OrderStorage,
     OrderValidator,
     ProtocolManager,
-
+    Ownable,
+    Pausable,
+    ReentrancyGuard
 {
     using LibTransferSafeUpgradeable for address;
     using LibTransferSafeUpgradeable for IERC721;
@@ -74,11 +77,18 @@ contract OrderBook is
     // 金库。
     address private _vault;
 
+    function initialize() {}
+
     // 创建订单。批量。卖家、买家都可以。
     // 返回，订单标识。
     function makeOrders(
         LibOrder.Order[] calldata orders // 一批订单
-    ) external returns (OrderKey[] memory orderKeys) {
+    )
+        external
+        whenNotPaused
+        nonReentrant
+        returns (OrderKey[] memory orderKeys)
+    {
         uint256 orderCount = orders.length;
         orderKeys = new OrderKey[](orderCount);
 
@@ -188,32 +198,148 @@ contract OrderBook is
     // 取消订单。批量。
     function cancelOrders(
         OrderKey[] calldata orderKeys // 一批订单
-    ) external returns (bool[] memory successList){
-        
+    ) external whenNotPaused nonReentrant returns (bool[] memory successList) {
+        uint256 orderCount = orderKeys.length;
+        successList = new bool[](orderCount);
+
+        for (uint256 m = 0; m < orderCount; m++) {
+            bool ok = _cancelOrderTry(orderKeys[m]);
+            successList[m] = ok;
+        }
+    }
+
+    // 取消订单。尝试。
+    function _cancelOrderTry(
+        OrderKey orderKey
+    ) internal returns (bool success) {
+        LibOrder.Order memory order = orders[orderKey];
+        if (
+            order.maker == msg.sender && // 只能自己
+            filledAmount[orderKey] < order.nft.amount // 没有完全成交
+        ) {
+            // 存储。删除order
+            _removeOrder(order);
+
+            // 卖单。退回NFT
+            if (order.side == LibOrder.Side.List) {
+                IVault(_vault).withdrawNFT(
+                    orderKey,
+                    order.maker, // send token to someone
+                    order.nft.collection,
+                    order.nft.tokenId
+                );
+            }
+            // 买单。退回ETH
+            else if (order.side == LibOrder.Side.Bid) {
+                uint256 leftNftAmount = order.nft.amount -
+                    filledAmount[orderKey];
+
+                IVault(_vault).withdrawETH(
+                    orderKey,
+                    leftNftAmount * Price.unwrap(order.price),
+                    order.maker
+                );
+            }
+
+            // 设置取消标记。
+            _cancelFilledAmount(orderKey);
+
+            success = true;
+            emit LogCancel(orderKey, order.maker);
+        } else {
+            emit LogSkipOrder(orderKey, order.salt);
+        }
     }
 
     // 修改订单。批量。
     // 返回，新的OrderKey，因为字段修改了。
     function editOrders(
         LibOrder.Order[] calldata orders // 一批订单
-    ) external returns (OrderKey[] memory newOrderKeys){
+    )
+        external
+        whenNotPaused
+        nonReentrant
+        returns (OrderKey[] memory newOrderKeys)
+    {}
 
+    function _editOrderTry(
+        OrderKey oldOrderKey,
+        LibOrder.Order calldata newOrder
+    ) internal returns (OrderKey newOrderKey, Price deltaBidPrice) {
+        LibOrder.Order memory oldOrder = orders[oldOrderKey];
+        OrderKey newOrderKey = LibOrder.hash(newOrder);
+        uint256 oldFilledAmount = filledAmount[oldOrderKey];
+
+        // todo oldFilledAmount 只存成交数量？不存成交金额？
+
+        // 只能修改价格、数量
+        if (
+            oldOrder.side != newOrder.side ||
+            oldOrder.saleKind != newOrder.saleKind ||
+            oldOrder.maker != newOrder.maker ||
+            oldOrder.nft.collection != newOrder.nft.collection ||
+            oldOrder.nft.tokenId != newOrder.nft.tokenId ||
+            filledAmount[oldOrderKey] >= oldOrder.nft.amount // 不能都成交。
+        ) {
+            emit LogSkipOrder(oldOrderKey, oldOrder.salt);
+            return (LibOrder.ORDERKEY_SENTINEL, 0);
+        }
+
+        // 检查 新订单的字段
+        if (
+            newOrder.maker != msg.sender ||
+            newOrder.salt == 0 ||
+            (newOrder.expiry != 0 && newOrder.expiry < block.timestamp) ||
+            filledAmount[newOrderKey] != 0 // 不能有记录。
+        ) {
+            emit LogSkipOrder(newOrderKey, newOrder.salt);
+            return (LibOrder.ORDERKEY_SENTINEL, 0);
+        }
+
+        // 存储。 把订单放入集合。
+        newOrderKey = _addOrder(newOrder);
+
+        // 金库。
+
+        // 卖单。 处理 NFT
+        if (newOrder.side == LibOrder.Side.List) {
+            // 修改NFT的关联。
+            IVault(_vault).editNFT(oldOrderKey, newOrderKey);
+        }
+        // 买单。 处理 ETH
+        else if (newOrder.side == LibOrder.Side.Bid) {
+            uint256 oldRemainingPrice = Price.unwrap(oldOrder.price) *
+                (oldOrder.nft.amount - oldFilledAmount);
+            uint256 newRemainingPrice = Price.unwrap(newOrder.price) *
+                (newOrder.nft.amount);
+
+            // todo 真实成交价，可能不等于 order.price 。 能直接 price * amount ?
+
+            // 新价格更高。补足差额。
+            if (newRemainingPrice > oldRemainingPrice) {
+                deltaBidPrice = newRemainingPrice - oldRemainingPrice;
+            }
+            // 修改ETH
+            IVault(_vault).editETH{value: deltaBidPrice}(
+                oldOrderKey,
+                newOrderKey,
+                oldRemainingPrice,
+                newRemainingPrice,
+                newOrder.maker
+            );
+        }
     }
 
     // 撮合订单。单个
     function matchOrder(
         LibOrder.Order calldata sellOrder, // 卖单
         LibOrder.Order calldata buyOrder // 买单
-    ) external payable{
-
-    }
+    ) external payable whenNotPaused nonReentrant {}
 
     // 撮合订单。批量。
     function matchOrders(
         LibOrder.MatchDetail[] calldata matchDetails
-    ) external returns (bool[] memory successList){
-
-    }
+    ) external whenNotPaused nonReentrant returns (bool[] memory successList) {}
 
     // 批量调用。
     //仅允许聚合 make/cancel/edit/match 相关函数，避免通过 multicall 调管理函数。
@@ -224,7 +350,6 @@ contract OrderBook is
     )
         external
         payable
-        returns (bool[] memory successList, bytes[] memory results){
-
-        }
+        returns (bool[] memory successList, bytes[] memory results)
+    {}
 }

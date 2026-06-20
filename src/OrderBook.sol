@@ -57,11 +57,112 @@ contract OrderBook is
     // 跳过订单。
     event LogSkipOrder(OrderKey orderKey, uint64 salt);
 
+    // 只允许 delegatecall 调用。
+    modifier onDelegateCall() {
+        _checkDelegateCall();
+        _;
+    }
+    function _checkDelegateCall() {
+        // todo
+    }
+
+    // 自身。
+    address public immutable self = address(this);
+    // 金库。
+    address private _vault;
+
     // 创建订单。批量。卖家、买家都可以。
     // 返回，订单标识。
     function makeOrders(
         LibOrder.Order[] calldata orders // 一批订单
-    ) external returns (OrderKey[] memory orderKeys);
+    ) external returns (OrderKey[] memory orderKeys) {
+        uint256 orderCount = orders.length;
+        orderKeys = new OrderKey[](orderCount);
+
+        // 买单，累加eth。
+        uint256 ethSum = 0;
+
+        for (uint256 k = 0; k < orderCount; k++) {
+            LibOrder.Order calldata order = orders[k];
+
+            uint128 buyPrice = 0;
+
+            // 买单。
+            if (order.side == LibOrder.Side.Bid) {
+                buyPrice = Price.unwrap(order.price) * order.nft.amount;
+            }
+        }
+    }
+
+    // 尝试，创建订单。
+    // 1、校验字段
+    // 2、金库。存NFT、ETH
+    // 3、存储。存价格、链表
+    function _makeOrderTry(
+        LibOrder.Order calldata order,
+        uint128 ethAmount
+    ) internal returns (OrderKey newOrderKey) {
+        newOrderKey = LibOrder.hash(order);
+
+        // 判断字段。
+        if (
+            order.maker == msg.sender && // 必须自己
+            Price.unwrap(order.price) != 0 && // price
+            order.salt != 0 && // salt
+            (order.expiry == 0 || order.expiry > block.timestamp) && // time
+            filledAmount[newOrderKey] == 0 // 没有成交记录
+        ) {
+            // 操作金库。
+            // 卖单。 判断NFT
+            if (order.side == LibOrder.Side.List) {
+                // 卖单，只能有1个NFT.
+                if (order.nft.amount != 1) {
+                    return LibOrder.ORDERKEY_SENTINEL;
+                }
+
+                // NFT 存金库。
+                IVault(_vault).depositeNFT(
+                    newOrderKey,
+                    order.maker,
+                    order.nft.collection,
+                    order.nft.tokenId
+                );
+            }
+            // 买单。 判断ETH
+            else if (order.side == LibOrder.Side.Bid) {
+                // 买单，必须有多个数量。
+                if (order.nft.amount == 0) {
+                    return LibOrder.ORDERKEY_SENTINEL;
+                }
+
+                // ETH 存金库。
+                // eth 必须使用 msg.value 传递金额。
+                IVault(_vault).depositeETH{value: uint256(ethAmount)}(
+                    newOrderKey,
+                    ethAmount
+                ); //
+            }
+
+            // 操作存储。
+            _addOrder(order);
+
+            // 事件。
+            emit LogMake(
+                newOrderKey,
+                order.side,
+                order.saleKind,
+                order.maker,
+                order.nft,
+                order.price,
+                order.expiry,
+                order.salt
+            );
+        } else {
+            emit LogSkipOrder(newOrderKey, order.salt);
+
+            return LibOrder.ORDERKEY_SENTINEL;
+        }
+    }
 
     // 取消订单。批量。
     function cancelOrders(

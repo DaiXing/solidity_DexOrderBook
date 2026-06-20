@@ -46,7 +46,7 @@ interface IVault {
         uint256 oldEthAmount,
         uint256 newEthAmount,
         address to // send eth to someone
-    ) external;
+    ) external payable;
 
     // 转账 NFT。
     function transferERC721(

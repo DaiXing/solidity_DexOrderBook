@@ -31,7 +31,7 @@ interface IOrderBook {
     // 撮合订单。批量。
     function matchOrders(
         LibOrder.MatchDetail[] calldata matchDetails
-    ) external returns (bool[] memory successList);
+    ) external payable returns (bool[] memory successList);
 
     // 批量调用。
     //仅允许聚合 make/cancel/edit/match 相关函数，避免通过 multicall 调管理函数。

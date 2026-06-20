@@ -20,12 +20,12 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 // 订单薄。
 contract OrderBook is
     IOrderBook,
-    OrderStorage,
-    OrderValidator,
-    ProtocolManager,
     Pausable,
     Ownable,
-    ReentrancyGuard
+    ReentrancyGuard,
+    OrderStorage,
+    OrderValidator,
+    ProtocolManager
 {
     using LibTransferSafeUpgradeable for address;
     using LibTransferSafeUpgradeable for IERC721;
@@ -77,6 +77,8 @@ contract OrderBook is
     // 金库。
     address private _vault;
 
+    constructor() Ownable(address(this)) {}
+
     function initialize() public {
         // _owner = msg.sender;
         _transferOwnership(msg.sender);
@@ -96,7 +98,7 @@ contract OrderBook is
         orderKeys = new OrderKey[](orderCount);
 
         // 买单，累加eth。
-        uint256 ethSum = 0;
+        uint256 buyEthSum = 0;
 
         // 遍历。
         for (uint256 k = 0; k < orderCount; k++) {
@@ -116,15 +118,15 @@ contract OrderBook is
             // 有效订单。
             if (
                 OrderKey.unwrap(orderKey) !=
-                OrderKey.unwrap(OrderKey.ORDERKEY_SENTINEL)
+                OrderKey.unwrap(LibOrder.ORDERKEY_SENTINEL)
             ) {
-                ethSum += buyPrice;
+                buyEthSum += buyPrice;
             }
         }
 
         // eth 给多了。返回。
-        if (msg.value > buyPrice) {
-            payable(msg.sender).safeTransferETH(msg.value - buyPrice);
+        if (msg.value > buyEthSum) {
+            msg.sender.safeTransferETH(msg.value - buyEthSum);
         }
     }
 
@@ -282,7 +284,7 @@ contract OrderBook is
 
         // 如果用户给多了，需要退回。
         if (msg.value > sumBidPrice) {
-            payable(msg.sender).safeTransferETH(msg.value - sumBidPrice);
+            msg.sender.safeTransferETH(msg.value - sumBidPrice);
         }
     }
 
@@ -399,7 +401,7 @@ contract OrderBook is
     function _matchOrder(
         LibOrder.Order calldata sellOrder,
         LibOrder.Order calldata buyOrder,
-        uint128 msgValue
+        uint256 msgValue
     ) internal returns (uint128 costValue) {
         OrderKey sellOrderKey = LibOrder.hash(sellOrder);
         OrderKey buyOrderKey = LibOrder.hash(buyOrder);
@@ -412,7 +414,7 @@ contract OrderBook is
             // 卖家不需要支付eth
             require(msgValue == 0, "msgValue invalid ");
 
-            bool isSellExist = orders[sellOrderKey].order.maker != 0;
+            bool isSellExist = orders[sellOrderKey].order.maker != address(0);
 
             // todo  第二个参数，为什么用 isSellExist ？
             _validateOrder(sellOrder, isSellExist);
@@ -575,7 +577,7 @@ contract OrderBook is
         external
         payable
         whenNotPaused
-        onlyDelegateCall
+        onDelegateCall
         returns (uint128 costValue)
     {
         costValue = _matchOrder(sellOrder, buyOrder, msgValue);
@@ -600,7 +602,7 @@ contract OrderBook is
 
         // 依次执行。
         for (uint256 m = 0; m < count; m++) {
-            LibOrder.MatchDetail storage detail = matchDetails[m];
+            LibOrder.MatchDetail calldata matchDetail = matchDetails[m];
 
             // 使用delegatecall
             bytes memory buf = abi.encodeWithSignature(
@@ -611,7 +613,7 @@ contract OrderBook is
             );
 
             // 调用。
-            (bool success, bytes memory data) = address(this).deletecall(buf);
+            (bool success, bytes memory data) = address(this).delegatecall(buf);
             successList[m] = success;
 
             if (success) {

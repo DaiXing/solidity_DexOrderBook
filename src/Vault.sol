@@ -25,6 +25,13 @@ contract Vault is IVault, Ownable {
     // pad空间。升级占位。
     uint256[50] private __gap__;
 
+    constructor() Ownable(address(this)) {}
+
+    function initialize() public {
+        // _owner = msg.sender;
+        _transferOwnership(msg.sender);
+    }
+
     // 只有订单薄才能操作。
     modifier onlyOrderBook() {
         require(msg.sender == orderBook, "not orderBook");
@@ -106,7 +113,7 @@ contract Vault is IVault, Ownable {
         uint256 oldEthAmount,
         uint256 newEthAmount,
         address to // send eth to someone
-    ) external {
+    ) external payable {
         // 删除旧值。
         delete ETHBalance[oldOrderKey];
 

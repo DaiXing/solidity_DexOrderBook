@@ -5,6 +5,19 @@ import "../libraries/LibOrder.sol";
 
 // 订单存储。
 interface IOrderStorage {
+    // 取最好的价格。
+    function getBestPrice(
+        address collection,
+        LibOrder.Side side
+    ) external view returns (Price price);
+
+    // 取相对最好的价格。
+    function getNextBestPrice(
+        address collection,
+        LibOrder.Side side,
+        Price price // 指定某个价格。比较。
+    ) external view returns (Price);
+
     // 查询订单。 分页。
     function getOrders(
         address collection,

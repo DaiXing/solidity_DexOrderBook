@@ -5,6 +5,7 @@ import "./libraries/LibOrder.sol";
 import {LibPayInfo} from "./libraries/LibPayInfo.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+// 手续费。
 abstract contract ProtocolManager is Ownable {
     // 费率。抽成比。 万。
     uint128 public protocolShare;

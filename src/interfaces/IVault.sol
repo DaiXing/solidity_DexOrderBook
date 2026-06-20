@@ -21,7 +21,7 @@ interface IVault {
     ) external;
 
     // 存款。 增加NFT。 只能卖单。
-    function depositeNFT(
+    function depositNFT(
         OrderKey orderKey,
         address from, // token owner
         address collection,

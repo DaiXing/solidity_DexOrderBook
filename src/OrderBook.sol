@@ -158,7 +158,7 @@ contract OrderBook is
                 }
 
                 // NFT 存金库。
-                IVault(_vault).depositeNFT(
+                IVault(_vault).depositNFT(
                     newOrderKey,
                     order.maker,
                     order.nft.collection,

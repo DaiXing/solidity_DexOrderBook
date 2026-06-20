@@ -19,4 +19,12 @@ abstract contract ProtocolManager is Ownable {
         protocolShare = newShare;
         emit LogUpdatedProtocolShare(newShare);
     }
+
+    // 计算手续费。
+    function _shareToAmount(
+        uint128 total, // 总金额。
+        uint128 share // 费率。
+    ) internal pure returns (uint128) {
+        return (total * share) / LibPayInfo.TOTAL_SHARE;
+    }
 }

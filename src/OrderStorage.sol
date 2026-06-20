@@ -124,6 +124,8 @@ contract OrderStorage is IOrderStorage {
         }
     }
 
+    // 删除订单。
+    // 成交后，从列表删除。
     function _removeOrder(
         LibOrder.Order memory order
     ) internal returns (OrderKey) {

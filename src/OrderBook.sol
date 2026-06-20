@@ -355,6 +355,201 @@ contract OrderBook is
         }
     }
 
+    // 判断2个订单，是否可以撮合。
+    function _isMatchAvailable(
+        LibOrder.Order calldata sellOrder,
+        LibOrder.Order calldata buyOrder,
+        OrderKey sellOrderKey,
+        OrderKey buyOrderKey
+    ) internal {
+        // 不能是同一个订单。
+        require(
+            OrderKey.unwrap(sellOrderKey) != OrderKey.unwrap(buyOrderKey),
+            "same order"
+        );
+        // 不能属于同一个人。
+        require(sellOrder.maker != buyOrder.maker, "same maker");
+        // 卖单、买单
+        require(
+            sellOrder.side == LibOrder.Side.List &&
+                buyOrder.side == LibOrder.Side.Bid,
+            "side invalid"
+        );
+        // 只能卖单个。
+        require(
+            sellOrder.saleKind == LibOrder.SaleKind.FixedPriceForItem,
+            "saleKind invalid"
+        );
+        // 资产。
+        require(
+            buyOrder.saleKind == LibOrder.SaleKind.FixedPriceForCollection ||
+                (sellOrder.nft.collection == buyOrder.nft.collection &&
+                    sellOrder.nft.tokenId == buyOrder.nft.tokenId),
+            "assert not match"
+        );
+        // 处理完成了。
+        require(
+            filledAmount[sellOrderKey] < sellOrder.nft.amount &&
+                filledAmount[buyOrderKey] < buyOrder.nft.amount,
+            "filledAmount invalid"
+        );
+    }
+
+    // 撮合订单。单个
+    function _matchOrder(
+        LibOrder.Order calldata sellOrder,
+        LibOrder.Order calldata buyOrder,
+        uint128 msgValue
+    ) internal returns (uint128 costValue) {
+        OrderKey sellOrderKey = LibOrder.hash(sellOrder);
+        OrderKey buyOrderKey = LibOrder.hash(buyOrder);
+
+        // 判断。
+        _isMatchAvailable(sellOrder, buyOrder, sellOrderKey, buyOrderKey);
+
+        // 如果自己是卖家。
+        if (msg.sender == sellOrder.maker) {
+            // 卖家不需要支付eth
+            require(msgValue == 0, "msgValue invalid ");
+
+            bool isSellExist = orders[sellOrderKey].order.maker != 0;
+
+            // todo  第二个参数，为什么用 isSellExist ？
+            _validateOrder(sellOrder, isSellExist);
+            _validateOrder(orders[buyOrderKey].order, false);
+
+            // 成交价。 使用 买单 的价格。
+            uint128 fillPrice = Price.unwrap(buyOrder.price);
+
+            // 成交了。
+
+            // 更新 卖单
+            if (isSellExist) {
+                // 移除。
+                _removeOrder(sellOrder);
+                // 卖单。 只能卖1个，直接更新了。
+                _updateFilledAmount(sellOrder.nft.amount, sellOrderKey);
+            }
+
+            // 更新 买单
+            // 因为卖单只卖1个，所以买单本次只能买1个。
+            _updateFilledAmount(filledAmount[buyOrderKey] + 1, buyOrderKey);
+
+            emit LogMatch(
+                sellOrderKey,
+                buyOrderKey,
+                sellOrder,
+                buyOrder,
+                fillPrice
+            );
+
+            //----------------------
+            // 金库。
+
+            // 买家把ETH给订单薄。 扣除手续费后，才能给卖家。
+            IVault(_vault).withdrawETH(buyOrderKey, fillPrice, address(this));
+
+            // 手续费。
+            uint128 protocolFee = _shareToAmount(fillPrice, protocolShare);
+
+            // 把剩余的eth，给卖家。
+            sellOrder.maker.safeTransferETH(fillPrice - protocolFee);
+
+            if (isSellExist) {
+                // 卖家把NFT给买家。
+                IVault(_vault).withdrawNFT(
+                    sellOrderKey, // owner
+                    buyOrder.maker, // send to
+                    sellOrder.nft.collection,
+                    sellOrder.nft.tokenId
+                );
+            } else {
+                // 卖单不在存储。直接转。
+                IVault(_vault).transferERC721(
+                    sellOrder.maker, // 卖家
+                    buyOrder.maker, // 买家
+                    sellOrder.nft // nft
+                );
+            }
+        }
+        // 如果自己是买家。
+        else if (msg.sender == buyOrder.maker) {
+            bool isBuyExist = orders[buyOrderKey].order.maker != address(0);
+
+            _validateOrder(buyOrder, isBuyExist);
+            _validateOrder(orders[sellOrderKey].order, false);
+
+            // 成交价。使用卖单价格。
+            uint128 fillPrice = Price.unwrap(sellOrder.price);
+
+            // 出价。
+            uint128 buyPrice = Price.unwrap(buyOrder.price);
+
+            // 买单出价，必须大于，卖单要价。
+            if (!isBuyExist) {
+                // 如果买单不在存储，则需要带上足够的eth
+                require(msgValue > fillPrice, "msgValue not enough");
+            } else {
+                // 价格必须足够。
+                require(buyPrice > fillPrice, "buyPrice not enough");
+
+                // 把买单的ETH转到本合约。
+                // todo 这里为啥不用 fillPrice ？
+                // todo 买单每个，只能买1个卖单？
+                IVault(_vault).withdrawETH(
+                    buyOrderKey,
+                    buyPrice,
+                    address(this)
+                );
+
+                // todo 删除买单？
+                _removeOrder(buyOrder);
+
+                // 更新 买单
+                // 因为卖单只卖1个，所以买单本次只能买1个。
+                _updateFilledAmount(filledAmount[buyOrderKey] + 1, buyOrderKey);
+            }
+
+            // 移除。
+            // todo 不移除卖单？
+            // _removeOrder(sellOrder);
+            // 卖单。 只能卖1个，直接更新了。
+            _updateFilledAmount(sellOrder.nft.amount, sellOrderKey);
+
+            emit LogMatch(
+                buyOrderKey,
+                sellOrderKey,
+                buyOrder,
+                sellOrder,
+                fillPrice
+            );
+
+            // 手续费。
+            uint128 protocolFee = _shareToAmount(fillPrice, protocolShare);
+
+            // 扣除手续费，把剩余eth给卖家。
+            sellOrder.maker.safeTransferETH(fillPrice - protocolFee);
+
+            // 买家给多了，退回。
+            if (buyPrice > fillPrice) {
+                buyOrder.maker.safeTransferETH(buyPrice - fillPrice);
+            }
+
+            // 卖家把NFT给买家。
+            IVault(_vault).withdrawNFT(
+                sellOrderKey, // owner
+                buyOrder.maker, // send to
+                sellOrder.nft.collection,
+                sellOrder.nft.tokenId
+            );
+
+            // 已经在存储，直接从存储扣费。否则，实时扣费。
+            costValue = isBuyExist ? 0 : buyPrice;
+        } else {
+            revert("send invalid");
+        }
+    }
+
     // 撮合订单。单个
     function matchOrder(
         LibOrder.Order calldata sellOrder, // 卖单

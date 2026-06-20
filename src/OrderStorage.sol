@@ -50,7 +50,7 @@ contract OrderStorage is IOrderStorage {
         address collection,
         LibOrder.Side side,
         Price price // 指定某个价格。比较。
-    ) public returns (Price) {
+    ) public view returns (Price) {
         // 如果没有指定比较价格。就用全局最优价。
         if (RedBlackTreeLibrary.isEmpty(price)) {
             return getBestPrice(collection, side);
@@ -218,6 +218,7 @@ contract OrderStorage is IOrderStorage {
         OrderKey firstOrderKey // 分页。从哪个元素开启取。
     )
         external
+        view
         returns (LibOrder.Order[] memory orderList, OrderKey nextOrderKey)
     {
         // 返回订单列表。
@@ -315,7 +316,7 @@ contract OrderStorage is IOrderStorage {
         uint256 tokenId,
         LibOrder.Side side, // 卖家、买家
         LibOrder.SaleKind saleKind
-    ) external returns (LibOrder.Order memory orderResult) {
+    ) external view returns (LibOrder.Order memory orderResult) {
         // 取最优价。
         Price price = getBestPrice(collection, side);
 

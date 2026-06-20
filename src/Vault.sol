@@ -46,7 +46,7 @@ contract Vault is IVault, Ownable {
     // 查询order的余额。返回， eth金额，NFTtokenid
     function balanceOf(
         OrderKey orderKey
-    ) external returns (uint256 ethAmount, uint256 tokenId) {
+    ) external view returns (uint256 ethAmount, uint256 tokenId) {
         ethAmount = ETHBalance[orderKey];
         tokenId = NFTBalance[orderKey];
     }

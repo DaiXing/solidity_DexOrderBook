@@ -653,9 +653,8 @@ contract OrderBook is
             if (callData.length >= 4) {
                 // uint256 offset = callData.offset;// 报错。 bytes calldata 没有offset
                 assembly {
-                    selector := calldataload(callData.offset) // 报错。汇编内不能 .offset
+                    selector := calldataload(callData.offset) //
                 }
-                // selector := calldataload(offset)
             }
 
             // 个别方法，才支持。

@@ -66,7 +66,7 @@ contract OrderStorage is IOrderStorage {
         }
     }
 
-    // 把订单插入红黑树。
+    // 把订单插入红黑树+列表。
     function _addOrder(
         LibOrder.Order memory order
     ) internal returns (OrderKey orderKey) {
@@ -124,8 +124,7 @@ contract OrderStorage is IOrderStorage {
         }
     }
 
-    // 删除订单。
-    // 成交后，从列表删除。
+    // 删除订单。成交后，从红黑树+列表删除。
     function _removeOrder(
         LibOrder.Order memory order
     ) internal returns (OrderKey theOrderKey) {
@@ -310,7 +309,7 @@ contract OrderStorage is IOrderStorage {
         }
     }
 
-    // 查找最好的订单。
+    // 查找最好的订单。 价格排序。
     function getBestOrder(
         address collection,
         uint256 tokenId,
